@@ -58,7 +58,7 @@ export default function Home() {
                 <li>Standard Content</li>
               </ul>
               <button
-                onClick={() => openCheckout('REPLACE_WITH_BASIC_PRICE_ID', 'Basic')}
+                onClick={() => openCheckout('pri_01khtxn6ysd5h1gkgxs248qzhm', 'Basic')}
                 disabled={!paddle}
                 className="w-full py-3 px-6 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-medium rounded-xl transition-colors disabled:opacity-50"
               >
@@ -80,7 +80,7 @@ export default function Home() {
                 <li>Lifetime Updates</li>
               </ul>
               <button
-                onClick={() => openCheckout('REPLACE_WITH_PRO_PRICE_ID', 'Pro')}
+                onClick={() => openCheckout('pri_01khtxjsc9008me3016zk6ashv', 'Pro')}
                 disabled={!paddle}
                 className="w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
               >
