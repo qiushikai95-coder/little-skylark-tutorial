@@ -1,65 +1,105 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { initializePaddle, Paddle } from '@paddle/paddle-js';
 
 export default function Home() {
+  const [paddle, setPaddle] = useState<Paddle>();
+
+  useEffect(() => {
+    initializePaddle({
+      environment: process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT as 'sandbox' | 'production',
+      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN!,
+    }).then((paddleInstance) => {
+      if (paddleInstance) {
+        setPaddle(paddleInstance);
+      }
+    });
+  }, []);
+
+  const openCheckout = (priceId: string, productName: string) => {
+    paddle?.Checkout.open({
+      items: [{ priceId, quantity: 1 }],
+      customData: { productName },
+    });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen flex flex-col font-sans">
+      {/* Hero Section */}
+      <section className="flex-1 flex flex-col items-center justify-center text-center px-4 py-20 bg-gray-50 dark:bg-gray-900">
+        <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-gray-900 dark:text-white mb-6">
+          Master your skills with <span className="text-indigo-600">Little Skylark</span>
+        </h1>
+        <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mb-10">
+          Unlock your potential with our premium tutorials. Designed for learners who demand excellence.
+        </p>
+        <button 
+          onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
+          className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-full transition-colors duration-200"
+        >
+          Get Started
+        </button>
+      </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="py-20 px-4 bg-white dark:bg-black">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-16 text-gray-900 dark:text-white">Simple Pricing</h2>
+          
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Basic Plan */}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-2xl p-8 flex flex-col items-center hover:shadow-lg transition-shadow duration-300">
+              <h3 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">Basic</h3>
+              <div className="text-4xl font-bold mb-6 text-gray-900 dark:text-white">$5.99</div>
+              <ul className="mb-8 space-y-3 text-gray-600 dark:text-gray-400 text-center">
+                <li>Essential Access</li>
+                <li>Community Support</li>
+                <li>Standard Content</li>
+              </ul>
+              <button
+                onClick={() => openCheckout('REPLACE_WITH_BASIC_PRICE_ID', 'Basic')}
+                disabled={!paddle}
+                className="w-full py-3 px-6 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-medium rounded-xl transition-colors disabled:opacity-50"
+              >
+                {!paddle ? 'Loading...' : 'Buy Basic'}
+              </button>
+            </div>
+
+            {/* Pro Plan */}
+            <div className="border-2 border-indigo-600 rounded-2xl p-8 flex flex-col items-center relative shadow-xl transform scale-105">
+              <div className="absolute top-0 -translate-y-1/2 bg-indigo-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                Most Popular
+              </div>
+              <h3 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">Pro</h3>
+              <div className="text-4xl font-bold mb-6 text-gray-900 dark:text-white">$9.99</div>
+              <ul className="mb-8 space-y-3 text-gray-600 dark:text-gray-400 text-center">
+                <li>Full Access</li>
+                <li>Priority Support</li>
+                <li>Exclusive Content</li>
+                <li>Lifetime Updates</li>
+              </ul>
+              <button
+                onClick={() => openCheckout('REPLACE_WITH_PRO_PRICE_ID', 'Pro')}
+                disabled={!paddle}
+                className="w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
+              >
+                 {!paddle ? 'Loading...' : 'Buy Pro'}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-8 text-center text-gray-500 text-sm bg-gray-50 dark:bg-gray-900">
+        <div className="flex justify-center space-x-6 mb-4">
+          <a href="/terms" className="hover:text-gray-900 dark:hover:text-white transition-colors">Terms of Service</a>
+          <a href="/privacy" className="hover:text-gray-900 dark:hover:text-white transition-colors">Privacy Policy</a>
+          <a href="/refund" className="hover:text-gray-900 dark:hover:text-white transition-colors">Refund Policy</a>
         </div>
-      </main>
+        © {new Date().getFullYear()} Little Skylark Tutorial. All rights reserved.
+      </footer>
     </div>
   );
 }
