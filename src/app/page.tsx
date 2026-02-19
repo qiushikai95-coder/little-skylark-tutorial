@@ -8,8 +8,8 @@ export default function Home() {
 
   useEffect(() => {
     initializePaddle({
-      environment: process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT as 'sandbox' | 'production',
-      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN!,
+      environment: 'sandbox',
+      token: 'test_5657265e035bc058b69d3ccd613',
     }).then((paddleInstance) => {
       if (paddleInstance) {
         setPaddle(paddleInstance);
