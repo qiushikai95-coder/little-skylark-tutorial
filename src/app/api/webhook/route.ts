@@ -37,7 +37,17 @@ export async function POST(req: Request) {
 async function sendEmail(transaction: any) {
   // Paddle customer email might be in customer object or directly if expanded
   // The user instruction says: data.customer.email
-  const email = transaction.customer?.email || transaction.customer_details?.email;
+  let email = transaction.customer?.email || transaction.customer_details?.email;
+  
+  // Also check details.checkout.customer.email (for overlay checkout)
+  if (!email && transaction.details?.checkout?.customer?.email) {
+      email = transaction.details.checkout.customer.email;
+  }
+  
+  // Final fallback: try to find email in customData if passed
+  if (!email && transaction.custom_data?.email) {
+      email = transaction.custom_data.email;
+  }
   
   if (!email) {
     console.warn('No email found in transaction');
@@ -99,15 +109,23 @@ async function logToGoogleSheets(transaction: any) {
   }
 
   // Extract amount from details.totals.grand_total (string) or total (string)
-  // Paddle uses string for money
-  const amount = transaction.details?.totals?.grand_total || transaction.details?.totals?.total || '0';
-  
-  // Extract custom data for product name
-  // Note: customData keys might be camelCase or original case depending on how it was passed
-  const productName = transaction.custom_data?.productName || transaction.customData?.productName || 'Unknown Product';
+  // Paddle uses string for money, typically in cents/smallest unit if coming from certain endpoints,
+  // but webhooks usually send it as a string representation of the major unit OR minor unit depending on context.
+  // However, user stated "Paddle 传过来的金额（比如 990）是最小货币单位（分）".
+  // So we need to parse it and divide by 100.
+  let rawAmount = transaction.details?.totals?.grand_total || transaction.details?.totals?.total || '0';
+  let amount = parseFloat(rawAmount);
+  if (!isNaN(amount)) {
+      amount = amount / 100;
+  } else {
+      amount = 0;
+  }
 
-  const payload = {
-    email: transaction.customer?.email || transaction.customer_details?.email || '',
+  // Also try to get email for Google Sheets log using the same logic as sendEmail
+  let email = transaction.customer?.email || transaction.customer_details?.email;
+  if (!email && transaction.details?.checkout?.customer?.email) {
+      email = transaction.details.checkout.customer.email;
+  }
     productName: productName,
     amount: amount, // Keeping it as string or number? Google Sheets usually handles both. 
                     // But previous code converted to number. 
