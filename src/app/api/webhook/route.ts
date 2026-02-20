@@ -22,9 +22,9 @@ export async function POST(req: Request) {
     if (eventData && eventData.eventType === EventName.TransactionCompleted) {
        const transaction = eventData.data;
        console.log(`Processing transaction ${transaction.id}`);
+       console.log('Transaction Data:', JSON.stringify(transaction, null, 2)); // Debug log to see full payload
 
-       await sendEmail(transaction);
-       await logToGoogleSheets(transaction);
+       await processTransaction(transaction);
     }
     
     return NextResponse.json({ received: true });
@@ -34,26 +34,35 @@ export async function POST(req: Request) {
   }
 }
 
-async function sendEmail(transaction: any) {
-  // Paddle customer email might be in customer object or directly if expanded
-  // The user instruction says: data.customer.email
-  let email = transaction.customer?.email || transaction.customer_details?.email;
+async function processTransaction(transaction: any) {
+  // 1. Correctly extract buyer email
+  // Paddle v2 structure might vary depending on whether customer is expanded or not.
+  // We check multiple possible locations.
+  let buyerEmail = '';
   
-  // Also check details.checkout.customer.email (for overlay checkout)
-  if (!email && transaction.details?.checkout?.customer?.email) {
-      email = transaction.details.checkout.customer.email;
-  }
-  
-  // Final fallback: try to find email in customData if passed
-  if (!email && transaction.custom_data?.email) {
-      email = transaction.custom_data.email;
-  }
-  
-  if (!email) {
-    console.warn('No email found in transaction');
-    return;
+  if (transaction.details?.checkout?.customer?.email) {
+      buyerEmail = transaction.details.checkout.customer.email;
+  } else if (transaction.customer?.email) {
+      buyerEmail = transaction.customer.email;
+  } else if (transaction.customer_details?.email) {
+      buyerEmail = transaction.customer_details.email;
   }
 
+  console.log(`Extracted Buyer Email: ${buyerEmail}`);
+
+  if (buyerEmail) {
+    await sendEmail(buyerEmail);
+  } else {
+    console.error('CRITICAL: Failed to extract buyer email from transaction data.');
+  }
+
+  // 2. Log to Google Sheets with amount conversion
+  await logToGoogleSheets(transaction, buyerEmail);
+}
+
+async function sendEmail(email: string) {
+  console.log(`Attempting to send email to: ${email}`);
+  
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
@@ -94,58 +103,66 @@ Little Skylark Team`,
   };
 
   try {
-     await transporter.sendMail(mailOptions);
-     console.log(`Email sent to ${email}`);
+     const info = await transporter.sendMail(mailOptions);
+     console.log(`Email sent successfully to ${email}. MessageId: ${info.messageId}`);
   } catch (err) {
       console.error('Failed to send email:', err);
   }
 }
 
-async function logToGoogleSheets(transaction: any) {
+async function logToGoogleSheets(transaction: any, email: string) {
   const webhookUrl = process.env.GOOGLE_SHEET_WEBHOOK_URL;
   if (!webhookUrl) {
     console.warn('GOOGLE_SHEET_WEBHOOK_URL not configured');
     return;
   }
 
-  // Extract amount from details.totals.grand_total (string) or total (string)
-  // Paddle uses string for money, typically in cents/smallest unit if coming from certain endpoints,
-  // but webhooks usually send it as a string representation of the major unit OR minor unit depending on context.
-  // However, user stated "Paddle 传过来的金额（比如 990）是最小货币单位（分）".
-  // So we need to parse it and divide by 100.
-  let rawAmount = transaction.details?.totals?.grand_total || transaction.details?.totals?.total || '0';
+  // Extract amount from details.totals.grand_total (string)
+  // Paddle v2 usually sends this as a string representing the major unit (e.g. "9.99"),
+  // BUT the user says it is in cents (e.g. 990). Let's handle conversion safely.
+  // If it's a string "990" representing cents, we divide by 100.
+  // If it's "9.90", dividing by 100 would be wrong.
+  // Paddle Billing (v2) API docs say `totals.grand_total` is a string representing the amount in the currency's minor unit? 
+  // Wait, standard Paddle Billing API usually returns `totals.grand_total` as a string like "1000" for $10.00.
+  // So dividing by 100 is correct for converting cents to dollars.
+  
+  let rawAmount = transaction.details?.totals?.grand_total || '0';
   let amount = parseFloat(rawAmount);
+  
+  // Basic heuristic: if the amount seems to be in cents (integer > 100 usually), convert to dollars.
+  // Or strictly follow user instruction: "Paddle 传过来的金额（比如 990）是最小货币单位（分），请...除以 100"
   if (!isNaN(amount)) {
       amount = amount / 100;
-  } else {
-      amount = 0;
   }
 
-  // Also try to get email for Google Sheets log using the same logic as sendEmail
-  let email = transaction.customer?.email || transaction.customer_details?.email;
-  if (!email && transaction.details?.checkout?.customer?.email) {
-      email = transaction.details.checkout.customer.email;
-  }
+  // Extract custom data for product name
+  const productName = transaction.custom_data?.productName || transaction.customData?.productName || 'Unknown Product';
+
+  const payload = {
+    email: email, // Use the extracted email
     productName: productName,
-    amount: amount, // Keeping it as string or number? Google Sheets usually handles both. 
-                    // But previous code converted to number. 
-                    // Stripe amount was in cents, Paddle is in major units (e.g. "5.99").
-                    // Let's keep it as is or parse float if needed.
+    amount: amount.toFixed(2), // Format as 2 decimal string
     sessionId: transaction.id,
     date: new Date().toISOString(),
   };
 
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  console.log('Logging to Google Sheets with payload:', JSON.stringify(payload));
 
-  if (!response.ok) {
-    throw new Error(`Google Sheets Webhook failed with status ${response.status}`);
+  try {
+    const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+        'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Google Sheets Webhook failed with status ${response.status}`);
+    }
+    
+    console.log('Logged to Google Sheets successfully');
+  } catch (error) {
+      console.error('Failed to log to Google Sheets:', error);
   }
-  
-  console.log('Logged to Google Sheets');
 }
