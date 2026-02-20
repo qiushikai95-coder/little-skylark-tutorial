@@ -22,7 +22,8 @@ export async function POST(req: Request) {
     if (eventData && eventData.eventType === EventName.TransactionCompleted) {
        const transaction = eventData.data;
        console.log(`Processing transaction ${transaction.id}`);
-       console.log('Transaction Data:', JSON.stringify(transaction, null, 2)); // Debug log to see full payload
+       // Log full webhook payload for debugging email extraction
+       console.log('Webhook payload:', JSON.stringify(body, null, 2));
 
        await processTransaction(transaction);
     }
@@ -40,12 +41,19 @@ async function processTransaction(transaction: any) {
   // We check multiple possible locations.
   let buyerEmail = '';
   
-  if (transaction.details?.checkout?.customer?.email) {
-      buyerEmail = transaction.details.checkout.customer.email;
-  } else if (transaction.customer?.email) {
+  // Try finding email in various locations based on Paddle v2 structure
+  if (transaction.customer?.email) {
       buyerEmail = transaction.customer.email;
+  } else if (transaction.details?.checkout?.customer?.email) {
+      buyerEmail = transaction.details.checkout.customer.email;
   } else if (transaction.customer_details?.email) {
       buyerEmail = transaction.customer_details.email;
+  } else if (transaction.custom_data?.email) {
+      // Sometimes passed via custom_data
+      buyerEmail = transaction.custom_data.email;
+  } else if (transaction.origin === 'web' && transaction.details?.customer?.email) {
+      // Legacy or specific web checkout structure
+      buyerEmail = transaction.details.customer.email;
   }
 
   console.log(`Extracted Buyer Email: ${buyerEmail}`);
