@@ -41,14 +41,6 @@ async function processTransaction(transaction: any) {
   // We check multiple possible locations.
   let buyerEmail = '';
   
-  // Try finding email in various locations based on Paddle v2 structure
-  // Based on the user's actual payload, the email is NOT in the transaction object directly.
-  // It seems we need to fetch the customer details separately because the payload only contains "customer_id".
-  // However, for immediate fix, let's check if Paddle expands it. 
-  // In the provided payload, "customer_id": "ctm_01khwxp565fabszzghqzdm74ad" is present, but no "customer" object.
-  // This means the webhook payload is NOT expanding the customer object.
-  // We MUST use the Paddle SDK to fetch the customer email using the customer_id.
-
   if (transaction.customer?.email) {
       buyerEmail = transaction.customer.email;
   } else if (transaction.details?.checkout?.customer?.email) {
@@ -65,6 +57,12 @@ async function processTransaction(transaction: any) {
       } catch (err) {
           console.error('Failed to fetch customer details:', err);
       }
+  } else if (transaction.custom_data?.email) {
+      // Sometimes passed via custom_data
+      buyerEmail = transaction.custom_data.email;
+  } else if (transaction.origin === 'web' && transaction.details?.customer?.email) {
+      // Legacy or specific web checkout structure
+      buyerEmail = transaction.details.customer.email;
   }
 
 
