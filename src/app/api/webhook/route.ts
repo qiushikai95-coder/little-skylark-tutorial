@@ -23,9 +23,12 @@ export async function POST(req: Request) {
        const transaction = eventData.data;
        console.log(`Processing transaction ${transaction.id}`);
        // Log full webhook payload for debugging email extraction
-       console.log('Webhook payload:', JSON.stringify(body, null, 2));
+       // Note: paddle.webhooks.unmarshal returns an object, so we log that.
+       // However, to extract customer_id directly from raw body for safety, we can parse it too.
+       const rawJson = JSON.parse(body);
+       console.log('Webhook payload:', JSON.stringify(rawJson, null, 2));
 
-       await processTransaction(transaction);
+       await processTransaction(transaction, rawJson);
     }
     
     return NextResponse.json({ received: true });
@@ -35,10 +38,8 @@ export async function POST(req: Request) {
   }
 }
 
-async function processTransaction(transaction: any) {
+async function processTransaction(transaction: any, rawJson: any) {
   // 1. Correctly extract buyer email
-  // Paddle v2 structure might vary depending on whether customer is expanded or not.
-  // We check multiple possible locations.
   let buyerEmail = '';
   
   if (transaction.customer?.email) {
@@ -47,26 +48,55 @@ async function processTransaction(transaction: any) {
       buyerEmail = transaction.details.checkout.customer.email;
   } else if (transaction.customer_details?.email) {
       buyerEmail = transaction.customer_details.email;
-  } else if (transaction.customer_id) {
-      // Fetch customer email using customer_id
-      try {
-          console.log(`Fetching customer details for ID: ${transaction.customer_id}`);
-          const customer = await paddle.customers.get(transaction.customer_id);
-          buyerEmail = customer.email;
-          console.log(`Fetched email from API: ${buyerEmail}`);
-      } catch (err) {
-          console.error('Failed to fetch customer details:', err);
-      }
   } else if (transaction.custom_data?.email) {
-      // Sometimes passed via custom_data
       buyerEmail = transaction.custom_data.email;
   } else if (transaction.origin === 'web' && transaction.details?.customer?.email) {
-      // Legacy or specific web checkout structure
       buyerEmail = transaction.details.customer.email;
   }
 
+  // Fallback: Fetch customer email using customer_id from raw payload or transaction object
+  if (!buyerEmail) {
+      const customerId = transaction.customer_id || rawJson?.data?.customer_id;
+      
+      if (customerId) {
+          console.log(`Email not found in payload. Fetching customer details for ID: ${customerId}`);
+          const environment = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'sandbox';
+          const apiUrl = environment === 'sandbox' 
+              ? `https://sandbox-api.paddle.com/customers/${customerId}`
+              : `https://api.paddle.com/customers/${customerId}`;
+          
+          try {
+              console.log(`Calling Paddle API: ${apiUrl}`);
+              const customerResponse = await fetch(apiUrl, {
+                  headers: {
+                      'Authorization': `Bearer ${process.env.PADDLE_API_KEY}`,
+                      'Content-Type': 'application/json'
+                  }
+              });
+              
+              if (customerResponse.ok) {
+                  const customerData = await customerResponse.json();
+                  console.log('Customer API Response:', JSON.stringify(customerData, null, 2));
+                  if (customerData?.data?.email) {
+                      buyerEmail = customerData.data.email;
+                      console.log(`Fetched email from API: ${buyerEmail}`);
+                  } else {
+                      console.error('Customer API response did not contain email. Data:', customerData);
+                  }
+              } else {
+                  console.error(`Failed to fetch customer details. Status: ${customerResponse.status}`);
+                  const errorText = await customerResponse.text();
+                  console.error('Error response:', errorText);
+              }
+          } catch (err) {
+              console.error('Error calling Customer API:', err);
+          }
+      } else {
+          console.warn('No customer_id found in transaction data to fetch email.');
+      }
+  }
 
-  console.log(`Extracted Buyer Email: ${buyerEmail}`);
+  console.log(`Final Extracted Buyer Email: ${buyerEmail}`);
 
   if (buyerEmail) {
     await sendEmail(buyerEmail);
