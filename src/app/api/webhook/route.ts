@@ -147,10 +147,8 @@ async function logToGoogleSheets(transaction: any, email: string) {
   let rawAmount = transaction.details?.totals?.grand_total || '0';
   let amount = parseFloat(rawAmount);
   
-  // Basic heuristic: if the amount seems to be in cents (integer > 100 usually), convert to dollars.
-  // Or strictly follow user instruction: "Paddle 传过来的金额（比如 990）是最小货币单位（分），请...除以 100"
   if (!isNaN(amount)) {
-      amount = amount / 100;
+    amount = amount / 100;
   }
 
   // Extract custom data for product name
